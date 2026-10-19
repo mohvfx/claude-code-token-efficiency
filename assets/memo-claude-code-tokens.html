@@ -1,0 +1,274 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Claude Code — Mémo tokens & cache</title>
+<style>
+  :root{
+    --ink:#141413; --muted:#6b655f; --faint:#9c958d;
+    --cream:#faf9f5; --line:#e4dfd6; --card:#ffffff;
+    --accent:#d97757; --blue:#4a6fa5; --green:#3f7d5b; --amber:#b8862b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:#e9e5dd; color:var(--ink); padding:20px;
+    font-size:8.5pt; line-height:1.3;
+  }
+  .page{
+    width:210mm; min-height:297mm; margin:0 auto; background:var(--cream);
+    padding:10mm 12mm; box-shadow:0 10px 40px rgba(0,0,0,.18);
+    display:flex; flex-direction:column; gap:4.1mm;
+  }
+
+  /* ---------- header ---------- */
+  header{ display:flex; justify-content:space-between; align-items:flex-start; gap:8mm;
+          border-bottom:1.6pt solid var(--ink); padding-bottom:2.4mm; }
+  .kicker{ font-size:6.6pt; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; margin-bottom:1.2mm;}
+  h1{ font-size:17.5pt; line-height:1.05; letter-spacing:-.02em; font-weight:800; }
+  h1 em{ font-style:normal; color:var(--accent); }
+  .sub{ font-size:7.6pt; color:var(--muted); margin-top:1.5mm; max-width:122mm; }
+  .stamp{ text-align:right; font-size:6.4pt; color:var(--faint); line-height:1.45; white-space:nowrap; }
+  .stamp b{ color:var(--ink); font-size:7.6pt; display:block; letter-spacing:.02em;}
+
+  /* ---------- section titles ---------- */
+  h2{ font-size:7.6pt; text-transform:uppercase; letter-spacing:.11em; color:var(--ink);
+      font-weight:800; display:flex; align-items:center; gap:2mm; margin-bottom:1.7mm;}
+  h2 .num{ display:inline-flex; align-items:center; justify-content:center;
+      width:4.3mm; height:4.3mm; background:var(--ink); color:var(--cream);
+      border-radius:50%; font-size:6.1pt; letter-spacing:0; }
+
+  /* ---------- request bar ---------- */
+  .flow{ background:var(--card); border:1px solid var(--line); border-radius:2.5mm; padding:3mm 3.2mm; }
+  .barwrap{ display:flex; align-items:center; gap:2.5mm; margin-bottom:1.8mm;}
+  .bar{ flex:1; height:6mm; border:1px solid #cfc8bc; border-radius:1.2mm; display:flex; overflow:hidden; background:#fff;}
+  .bar span{ height:100%; display:block; }
+  .b-cache{ background:#9db8d8; }
+  .b-in{ background:#6f93bd; }
+  .b-out{ background:var(--accent); }
+  .b-tool{ background:#c9c2b6; }
+  .bar-legend{ display:flex; gap:4mm; font-size:6.4pt; color:var(--muted); flex-wrap:wrap; }
+  .bar-legend i{ width:2mm; height:2mm; border-radius:.4mm; display:inline-block; margin-right:1mm; vertical-align:middle;}
+  .flow p{ font-size:7.4pt; color:var(--muted); }
+  .flow p b{ color:var(--ink); }
+  .prices{ display:flex; gap:1.8mm; margin-top:2mm; }
+  .price{ flex:1; background:var(--cream); border:1px solid var(--line); border-radius:1.5mm; padding:1.2mm 1.8mm; }
+  .price .k{ font-size:5.9pt; text-transform:uppercase; letter-spacing:.07em; color:var(--faint); }
+  .price .v{ font-size:9pt; font-weight:800; letter-spacing:-.02em; }
+  .price .d{ font-size:6pt; color:var(--muted); line-height:1.25; }
+
+  /* leviers inline */
+  .levrow{ display:flex; gap:1.6mm; margin-top:2.2mm; align-items:stretch; }
+  .levrow .cap{ font-size:6.2pt; text-transform:uppercase; letter-spacing:.09em; color:var(--faint);
+                font-weight:800; writing-mode:vertical-rl; transform:rotate(180deg); text-align:center;
+                border-right:1px solid var(--line); padding-right:1.4mm; }
+  .levrow .it{ flex:1; border-left:1.6pt solid var(--accent); padding-left:1.6mm; }
+  .levrow .it .t{ font-size:7.2pt; font-weight:800; }
+  .levrow .it .d{ font-size:6.3pt; color:var(--muted); line-height:1.25; }
+
+  /* ---------- two columns ---------- */
+  .cols{ display:grid; grid-template-columns:1fr 1fr; gap:5mm; align-items:start; }
+
+  /* checklist */
+  .phase{ margin-bottom:2mm; }
+  .phase:last-child{ margin-bottom:0; }
+  .phase-h{ font-size:6.3pt; font-weight:800; text-transform:uppercase; letter-spacing:.1em;
+            color:var(--accent); margin-bottom:.8mm; display:flex; align-items:center; gap:1.5mm;}
+  .phase-h::after{ content:""; flex:1; height:1px; background:var(--line); }
+  ul.check{ list-style:none; }
+  ul.check li{ position:relative; padding-left:4.4mm; margin-bottom:1.15mm; font-size:7.6pt; }
+  ul.check li::before{ content:"☐"; position:absolute; left:0; top:-.4mm; font-size:8pt; color:var(--faint); }
+  ul.check li b{ font-weight:700; }
+  code{ font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:7pt;
+        background:#efeae1; border-radius:.8mm; padding:.1mm 1mm; color:#3a352f; }
+  .why{ color:var(--muted); font-size:7pt; }
+
+  /* cache table */
+  table{ width:100%; border-collapse:collapse; font-size:7.4pt; }
+  th{ text-align:left; font-size:6.2pt; text-transform:uppercase; letter-spacing:.09em;
+      color:var(--faint); font-weight:700; padding:0 0 1mm 0; border-bottom:1px solid var(--ink); }
+  td{ padding:1.25mm 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:last-child td{ border-bottom:none; }
+  .tag{ display:inline-block; font-size:6pt; font-weight:800; padding:.35mm 1.3mm; border-radius:1mm;
+        text-transform:uppercase; letter-spacing:.05em; }
+  .break{ background:#f6e3dc; color:#a0442a; }
+  .safe{ background:#e3efe7; color:#2c6444; }
+  .mono{ font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:7pt; }
+  .note{ margin-top:1.9mm; font-size:7pt; color:var(--muted); border-left:2pt solid var(--accent); padding-left:2.4mm; }
+  .note b{ color:var(--ink); }
+
+  /* diagnostic */
+  .diag{ display:grid; grid-template-columns:1fr 1fr; gap:2.4mm; }
+  .diag .card{ background:var(--card); border:1px solid var(--line); border-radius:2mm; padding:2.2mm 2.6mm; }
+  .diag .card .sym{ font-size:6.2pt; font-weight:800; text-transform:uppercase; letter-spacing:.08em; margin-bottom:.6mm; }
+  .diag .m .sym{ color:var(--blue); }
+  .diag .e .sym{ color:var(--amber); }
+  .diag .card .q{ font-size:7.6pt; font-weight:700; margin-bottom:.7mm; line-height:1.2;}
+  .diag .card .a{ font-size:7pt; color:var(--muted); line-height:1.25; }
+
+  /* takeaways */
+  .take{ background:var(--ink); color:var(--cream); border-radius:2.5mm; padding:3mm 3.6mm;
+         display:grid; grid-template-columns:repeat(3,1fr); gap:4mm; }
+  .take .k{ font-size:12.5pt; font-weight:800; color:var(--accent); line-height:1; margin-bottom:.7mm;}
+  .take .t{ font-size:7.4pt; line-height:1.3; }
+  .take .t b{ color:#fff; }
+
+  footer{ display:flex; justify-content:space-between; align-items:center;
+          border-top:1px solid var(--line); padding-top:1.6mm; font-size:6.3pt; color:var(--faint); margin-top:auto;}
+  footer .src{ max-width:132mm; }
+
+  @page{ size:A4; margin:0; }
+  @media print{
+    html,body{ background:#fff; padding:0; margin:0; }
+    .page{
+      box-shadow:none; margin:0; width:210mm; min-height:288mm; height:auto;
+      padding:10mm 12mm;
+    }
+    section, .cols, .take, table, tr{ break-inside:avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div>
+      <div class="kicker">Claude Code Workshop · Anthropic</div>
+      <h1>Tokens &amp; cache :<br>le <em>mémo</em> d'une session</h1>
+      <p class="sub">« Efficient doesn't mean fewer tokens. It means the ones you use go toward what you actually asked for. »
+      — logique du préfixe, hygiène de contexte, effort et modèle.</p>
+    </div>
+    <div class="stamp">
+      <b>1 page</b>
+      source : « Maximizing the value<br>of Claude Code » · 26 min
+    </div>
+  </header>
+
+  <section class="flow">
+    <h2><span class="num">1</span> Un prompt n'est jamais une requête</h2>
+    <div class="barwrap">
+      <div class="bar">
+        <span class="b-cache" style="width:26%"></span>
+        <span class="b-in" style="width:10%"></span>
+        <span class="b-tool" style="width:9%"></span>
+        <span class="b-cache" style="width:18%"></span>
+        <span class="b-out" style="width:7%"></span>
+        <span class="b-in" style="width:12%"></span>
+        <span class="b-cache" style="width:11%"></span>
+        <span class="b-out" style="width:7%"></span>
+      </div>
+      <div style="font-size:6.4pt;color:var(--muted);white-space:nowrap">contexte<br>qui grandit</div>
+    </div>
+    <div class="bar-legend">
+      <span><i class="b-cache"></i>préfixe caché (état serveur)</span>
+      <span><i class="b-in"></i>input nouveau</span>
+      <span><i class="b-tool"></i>résultat d'outil</span>
+      <span><i class="b-out"></i>output (tool calls, thinking)</span>
+    </div>
+    <p style="margin-top:2mm">Chaque envoi = system prompt + définitions d'outils + env/git + <code>CLAUDE.md</code> + noms de skills &amp; MCP + <b>ton message</b>. Puis boucle : tool call → exécution → résultat renvoyé. <b>La barre grossit à chaque aller-retour et rien n'en sort jamais.</b></p>
+    <div class="prices">
+      <div class="price"><div class="k">Input</div><div class="v">1×</div><div class="d">parallélisable → bon marché</div></div>
+      <div class="price"><div class="k">Cache read</div><div class="v">0,1×</div><div class="d">le levier n°1</div></div>
+      <div class="price"><div class="k">Cache write 5 min</div><div class="v">1,25×</div><div class="d">payé une fois</div></div>
+      <div class="price"><div class="k">Cache write 1 h</div><div class="v">2×</div><div class="d">si pauses longues</div></div>
+      <div class="price"><div class="k">Output</div><div class="v">le + cher</div><div class="d">1 passe complète / token</div></div>
+    </div>
+    <div class="levrow">
+      <div class="cap">4 leviers</div>
+      <div class="it"><div class="t">Tokens in</div><div class="d">ce qui est chargé, la durée de session</div></div>
+      <div class="it"><div class="t">Tokens out</div><div class="d">l'effort avant de conclure</div></div>
+      <div class="it"><div class="t">Part en cache</div><div class="d">préfixe stable, cache chaud</div></div>
+      <div class="it"><div class="t">Modèle</div><div class="d">multiplicateur des trois autres</div></div>
+    </div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2><span class="num">2</span> Checklist de session</h2>
+
+      <div class="phase">
+        <div class="phase-h">Avant — choisir, puis ne plus toucher</div>
+        <ul class="check">
+          <li><b>Modèle au bon niveau</b> — <span class="why">Sonnet = généraliste, Opus = expert (bug subtil), Haiku = mécanique. Le modèle multiplie <i>tous</i> les autres coûts.</span></li>
+          <li><b><code>/effort</code> par défaut</b> — <span class="why">medium suffit presque toujours (excellent sur Fable 5.1).</span></li>
+          <li><b><code>/context</code></b> — <span class="why">voir ce qui est chargé et couper l'inutile.</span></li>
+          <li><b><code>/mcp</code></b> — <span class="why">désactiver les serveurs inutilisés ; préférer un CLI (gh, aws).</span></li>
+          <li><b>Nettoyer <code>CLAUDE.md</code></b> — <span class="why">que l'universel. Le spécifique → <b>skill</b> (chargée à la demande).</span></li>
+        </ul>
+      </div>
+
+      <div class="phase">
+        <div class="phase-h">Pendant — ce que tu mets dans la conversation</div>
+        <ul class="check">
+          <li><b><code>@fichier.ts</code></b> — <span class="why">injecté avant l'envoi : un aller-retour économisé.</span></li>
+          <li><b>Sortie de commande silencieuse</b> — <span class="why">les 400 lignes « OK » restent dans <i>toutes</i> les requêtes suivantes. <code>--reporter=dot</code>.</span></li>
+          <li><b>Commandes du quotidien dans <code>CLAUDE.md</code></b> — <span class="why">écrites exactement comme tu les lances.</span></li>
+          <li><b>Fouille bruyante → subagent</b> — <span class="why">il lit 30 fichiers, ne rend que la conclusion.</span></li>
+          <li><b>Ne pas changer modèle / effort</b> — <span class="why">ça casse le préfixe (sauf l'effort sur Fable 5.1).</span></li>
+        </ul>
+      </div>
+
+      <div class="phase">
+        <div class="phase-h">Après — garder la session focalisée</div>
+        <ul class="check">
+          <li><b><code>/clear</code> à chaque nouvelle tâche</b> — <span class="why">sinon tu paies la tâche 1 pendant la tâche 3.</span></li>
+          <li><b><code>/compact</code> <i>avant</i> de t'éloigner</b> — <span class="why">pendant que le cache est chaud ; sinon la relecture est au prix plein.</span></li>
+          <li><b>Reprise le lendemain ?</b> — <span class="why"><code>/compact</code> la veille : <code>claude --resume</code> relit tout à froid.</span></li>
+          <li><b><code>/rewind</code></b> — <span class="why">jeter les derniers tours plutôt que tout compacter.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2><span class="num">3</span> Les pièges de cache</h2>
+      <table>
+        <thead><tr><th style="width:42%">Action</th><th style="width:17%">Cache</th><th>Conséquence</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">/model</td><td><span class="tag break">casse</span></td><td>cache = état interne du modèle → relecture complète</td></tr>
+          <tr><td class="mono">/effort</td><td><span class="tag break">casse</span></td><td>sauf <b>Fable 5.1</b> : l'effort est dans le préfixe</td></tr>
+          <tr><td class="mono">/compact · /clear</td><td><span class="tag break">casse</span></td><td>inévitable : on réécrit le préfixe</td></tr>
+          <tr><td class="mono">/resume après pause</td><td><span class="tag break">casse</span></td><td>TTL expiré → tout au prix plein, une fois</td></tr>
+          <tr><td class="mono">/rewind</td><td><span class="tag break">casse</span></td><td>tronque le préfixe</td></tr>
+          <tr><td>Éditer un fichier</td><td><span class="tag safe">intact</span></td><td>côté Claude Code, jamais dans la requête</td></tr>
+          <tr><td>Mode de permissions</td><td><span class="tag safe">intact</span></td><td>hors requête</td></tr>
+          <tr><td>Éditer <code>CLAUDE.md</code></td><td><span class="tag safe">intact</span></td><td>lu une fois au démarrage → effet au prochain <code>/clear</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <b>Règle du préfixe :</b> le serveur ne réutilise que la partie <b>strictement identique depuis le premier token</b>. Un seul token différent → tout ce qui suit est recalculé au prix plein.
+      </div>
+
+      <div style="margin-top:3mm">
+        <h2><span class="num">4</span> Quel réglage corriger ?</h2>
+        <div class="diag">
+          <div class="card m">
+            <div class="sym">Le modèle</div>
+            <div class="q">« Il ne savait pas. »</div>
+            <div class="a">Résultat faux, concept mal compris, territoire inconnu.<br><b>→ monter de modèle.</b></div>
+          </div>
+          <div class="card e">
+            <div class="sym">L'effort</div>
+            <div class="q">« Il n'a pas assez essayé. »</div>
+            <div class="a">Fichier sauté, test non lancé, abandon à moitié.<br><b>→ monter l'effort, ou le baisser s'il en fait trop.</b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="take">
+    <div><div class="k">1</div><div class="t"><b>Choisir au début, ne plus toucher.</b> Modèle, effort et MCP au démarrage — ou juste après un <code style="background:#2b2826;color:#e8e3d9">/clear</code>.</div></div>
+    <div><div class="k">2</div><div class="t"><b>Être délibéré sur le contexte.</b> <code style="background:#2b2826;color:#e8e3d9">@</code> les fichiers connus, output silencieux, fouille en subagent.</div></div>
+    <div><div class="k">3</div><div class="t"><b>Garder la session focalisée.</b> Un <code style="background:#2b2826;color:#e8e3d9">/clear</code> par tâche, un <code style="background:#2b2826;color:#e8e3d9">/compact</code> avant la pause.</div></div>
+  </section>
+
+  <footer>
+    <div class="src">D'après le Claude Code Workshop « Maximizing the value of Claude Code » (Anthropic), ~26 min. TTL &amp; tarifs susceptibles d'évoluer : vérifier la doc avant de s'y fier en production.</div>
+    <div>mémo · tokens &amp; cache</div>
+  </footer>
+
+</div>
+</body>
+</html>
