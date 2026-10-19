@@ -37,13 +37,13 @@ assets/
 Claude Code:
 
 ```bash
-git clone https://github.com/<you>/claude-code-token-efficiency ~/.claude/skills/claude-code-token-efficiency
+git clone https://github.com/mohvfx/claude-code-token-efficiency ~/.claude/skills/claude-code-token-efficiency
 ```
 
 OpenCode:
 
 ```bash
-git clone https://github.com/<you>/claude-code-token-efficiency ~/.config/opencode/skills/claude-code-token-efficiency
+git clone https://github.com/mohvfx/claude-code-token-efficiency ~/.config/opencode/skills/claude-code-token-efficiency
 ```
 
 Or copy the folder anywhere your agent looks for skills.
